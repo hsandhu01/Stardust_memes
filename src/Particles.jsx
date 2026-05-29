@@ -15,8 +15,8 @@ function makeSprite() {
   const ctx = c.getContext('2d')
   const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2)
   g.addColorStop(0.0, 'rgba(255,255,255,1)')
-  g.addColorStop(0.25, 'rgba(255,255,255,0.85)')
-  g.addColorStop(0.55, 'rgba(255,255,255,0.25)')
+  g.addColorStop(0.18, 'rgba(255,255,255,0.95)')
+  g.addColorStop(0.42, 'rgba(255,255,255,0.35)')
   g.addColorStop(1.0, 'rgba(255,255,255,0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, s, s)
@@ -60,14 +60,13 @@ export default function Particles({ text, theme, analyserRef, burst }) {
 
   // Rebuild targets whenever the text changes.
   useEffect(() => {
-    const cloud = sampleText(text, { worldWidth: isMobile ? 8.5 : 11 })
-    const m = cloud.length / 2
+    const cloud = sampleText(text, { worldWidth: isMobile ? 8.5 : 11, count: COUNT })
     const { targets } = state
     for (let i = 0; i < COUNT; i++) {
-      const j = (i % m) * 2
-      targets[i * 3] = cloud[j]
-      targets[i * 3 + 1] = cloud[j + 1]
-      targets[i * 3 + 2] = (state.seed[i] - 0.5) * 1.6
+      targets[i * 3] = cloud[i * 2]
+      targets[i * 3 + 1] = cloud[i * 2 + 1]
+      // shallow depth keeps the word crisp while still giving it volume
+      targets[i * 3 + 2] = (state.seed[i] - 0.5) * 0.7
       state.velocities[i * 3] += (Math.random() - 0.5) * 0.5
       state.velocities[i * 3 + 1] += (Math.random() - 0.5) * 0.5
     }
@@ -164,8 +163,8 @@ export default function Particles({ text, theme, analyserRef, burst }) {
     audioLevel.current += (target - audioLevel.current) * 0.18
     const al = audioLevel.current
 
-    const stiffness = 5.0
-    const damping = Math.pow(0.0009, dt)
+    const stiffness = 6.5
+    const damping = Math.pow(0.0006, dt)
     const repelR2 = 2.4 * 2.4
     const pulse = al * 3.2 // outward kick on the beat
 
@@ -191,9 +190,9 @@ export default function Particles({ text, theme, analyserRef, burst }) {
       }
 
       const s = state.seed[i]
-      velocities[ix] += Math.sin(t * 0.7 + s * 30) * 0.012
-      velocities[iy] += Math.cos(t * 0.6 + s * 40) * 0.012
-      velocities[iz] += Math.sin(t * 0.5 + s * 50) * 0.012
+      velocities[ix] += Math.sin(t * 0.7 + s * 30) * 0.006
+      velocities[iy] += Math.cos(t * 0.6 + s * 40) * 0.006
+      velocities[iz] += Math.sin(t * 0.5 + s * 50) * 0.006
 
       // music push: drive each particle outward from its target on loud frames
       if (pulse > 0.01) {
