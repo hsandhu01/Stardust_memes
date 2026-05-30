@@ -11,7 +11,26 @@ const THEMES = [
   { name: 'Gold', colors: ['#fff1a8', '#ff8a00'] },
 ]
 
-const PROMPTS = ['hello', 'dream', '❤️', '你好', 'will you · marry me · ?', 'magic']
+const PROMPTS = [
+  'hello',
+  '❤️',
+  'happy birthday',
+  'will you · marry me · ?',
+  "it's giving ✨",
+  'main character',
+  "we're so back",
+  'let him cook',
+  'gm ☀️',
+  'no cap 🧢',
+  'slay',
+  'good vibes only',
+  'POV: · you went · viral',
+  'happy · new year · 🎉',
+  'iykyk',
+  '🔥🔥🔥',
+  '你好',
+  'dream',
+]
 
 const canShareNative = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
@@ -230,7 +249,7 @@ export default function App() {
           <button style={styles.go} onClick={() => commit()}>form ✦</button>
         </div>
 
-        <div style={styles.prompts}>
+        <div className="row-scroll" style={styles.prompts}>
           {PROMPTS.map((p) => (
             <button key={p} style={styles.chip} onClick={() => { setDraft(p); commit(p) }}>{p}</button>
           ))}
@@ -316,11 +335,15 @@ const styles = {
     border: 'none', borderRadius: 12, padding: '0 18px', fontWeight: 800,
     fontSize: 15, cursor: 'pointer', whiteSpace: 'nowrap',
   },
-  prompts: { display: 'flex', gap: 7, flexWrap: 'wrap' },
+  prompts: {
+    display: 'flex', gap: 7, flexWrap: 'nowrap', overflowX: 'auto',
+    paddingBottom: 2, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+  },
   chip: {
     background: 'rgba(255,255,255,0.06)', color: '#cfe0ff',
     border: '1px solid rgba(255,255,255,0.12)', borderRadius: 999,
     padding: '6px 12px', fontSize: 13, cursor: 'pointer',
+    flex: '0 0 auto', whiteSpace: 'nowrap',
   },
   bottomRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',

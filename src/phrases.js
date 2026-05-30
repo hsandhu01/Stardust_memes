@@ -1,5 +1,5 @@
 // How long each phrase in a sequence stays formed before morphing to the next.
-export const HOLD_MS = 2600
+export const HOLD_MS = 3200
 
 // Split the input into a sequence of phrases. People can separate phrases with
 // "·", "|", "/", or a newline. A single comma-free word stays one phrase, so

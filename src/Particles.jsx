@@ -6,7 +6,7 @@ import { parsePhrases, HOLD_MS } from './phrases.js'
 
 const isMobile = typeof window !== 'undefined' &&
   (window.matchMedia('(max-width: 768px)').matches || /Mobi|Android/i.test(navigator.userAgent))
-const COUNT = isMobile ? 12000 : 26000
+const COUNT = isMobile ? 14000 : 30000
 const SPAN = isMobile ? 8.5 : 11
 
 function makeSprite() {
