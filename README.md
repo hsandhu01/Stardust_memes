@@ -7,11 +7,13 @@ Type anything and watch ~26,000 glowing particles swarm into formation to spell 
 ## Features
 
 - **Type anything** — names, words, emoji, CJK characters. The particles reform into the exact shape.
+- **Message sequences** — separate phrases with `·`, `|`, `/`, or a newline (e.g. `will you · marry me · ?`) and the particles morph through them in order.
 - **Cursor force** — move through the field and the stars scatter, then settle back.
 - **5 color themes** — Aurora, Ember, Bloom, Mint, Gold.
 - **Shareable links** — every creation has its own URL (`?text=Harry&theme=2`); the link reopens the exact scene.
 - **Save as image** — one-click PNG.
-- **Record the morph** — capture the reform animation as a WebM video.
+- **Record as video** — capture the morph (or a full sequence) as MP4, with a WebM fallback.
+- **Native share** — one-tap share sheet on mobile (Web Share API) sends the image + link to any app.
 - **Music reactive** — enable the mic and the particles pulse to whatever's playing.
 - **Mobile ready** — touch-driven, with an adaptive particle count.
 
