@@ -9,6 +9,12 @@ const THEMES = [
   { name: 'Bloom', colors: ['#ff4ecd', '#7afcff'] },
   { name: 'Mint', colors: ['#00ffa3', '#0a84ff'] },
   { name: 'Gold', colors: ['#fff1a8', '#ff8a00'] },
+  { name: 'Sunset', colors: ['#ff6a00', '#ee0979'] },
+  { name: 'Vapor', colors: ['#ff6ec4', '#7873f5'] },
+  { name: 'Toxic', colors: ['#c6ff00', '#00e5ff'] },
+  { name: 'Cosmic', colors: ['#7367f0', '#f5a3ff'] },
+  { name: 'Fire', colors: ['#ff0844', '#ffb199'] },
+  { name: 'Ice', colors: ['#8ec5fc', '#e0c3fc'] },
 ]
 
 const PROMPTS = [
@@ -255,23 +261,23 @@ export default function App() {
           ))}
         </div>
 
-        <div style={styles.bottomRow}>
-          <div style={styles.themes}>
-            {THEMES.map((t, i) => (
-              <button
-                key={t.name}
-                title={t.name}
-                onClick={() => setThemeIdx(i)}
-                style={{
-                  ...styles.swatch,
-                  background: `linear-gradient(135deg, ${t.colors[0]}, ${t.colors[1]})`,
-                  outline: i === themeIdx ? '2px solid #fff' : '2px solid transparent',
-                  transform: i === themeIdx ? 'scale(1.15)' : 'scale(1)',
-                }}
-              />
-            ))}
-          </div>
+        <div className="row-scroll" style={styles.themes}>
+          {THEMES.map((t, i) => (
+            <button
+              key={t.name}
+              title={t.name}
+              onClick={() => setThemeIdx(i)}
+              style={{
+                ...styles.swatch,
+                background: `linear-gradient(135deg, ${t.colors[0]}, ${t.colors[1]})`,
+                outline: i === themeIdx ? '2px solid #fff' : '2px solid transparent',
+                transform: i === themeIdx ? 'scale(1.15)' : 'scale(1)',
+              }}
+            />
+          ))}
+        </div>
 
+        <div style={styles.bottomRow}>
           <div style={styles.actions}>
             <button style={styles.iconBtn} onClick={canShareNative ? shareNative : copyLink} title="Share">
               {canShareNative ? '↗ share' : 'link'}
@@ -346,10 +352,13 @@ const styles = {
     flex: '0 0 auto', whiteSpace: 'nowrap',
   },
   bottomRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
     gap: 10, flexWrap: 'wrap',
   },
-  themes: { display: 'flex', gap: 9 },
+  themes: {
+    display: 'flex', gap: 10, overflowX: 'auto', flexWrap: 'nowrap',
+    paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+  },
   swatch: {
     width: 26, height: 26, borderRadius: '50%', border: 'none',
     cursor: 'pointer', transition: 'transform 0.15s ease', flex: '0 0 auto',
