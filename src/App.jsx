@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import Particles from './Particles.jsx'
+import { parsePhrases, HOLD_MS } from './phrases.js'
 
 const THEMES = [
   { name: 'Aurora', colors: ['#00e5ff', '#a96bff'] },
@@ -10,11 +11,13 @@ const THEMES = [
   { name: 'Gold', colors: ['#fff1a8', '#ff8a00'] },
 ]
 
-const PROMPTS = ['hello', 'dream', 'love', '你好', '2026', 'wish', 'magic']
+const PROMPTS = ['hello', 'dream', '❤️', '你好', 'will you · marry me · ?', 'magic']
+
+const canShareNative = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
 function readURL() {
   const p = new URLSearchParams(window.location.search)
-  const text = (p.get('text') || 'stardust').slice(0, 24)
+  const text = (p.get('text') || 'stardust').slice(0, 80)
   let theme = parseInt(p.get('theme') ?? '0', 10)
   if (Number.isNaN(theme) || theme < 0 || theme >= THEMES.length) theme = 0
   return { text, theme }
@@ -29,13 +32,14 @@ export default function App() {
   const [recording, setRecording] = useState(false)
   const [toast, setToast] = useState('')
   const [burst, setBurst] = useState(0)
+  const [restart, setRestart] = useState(0)
+  const [seq, setSeq] = useState({ i: 0, n: 1 })
 
   const glRef = useRef(null)
   const analyserRef = useRef(null)
   const audioCtxRef = useRef(null)
   const micStreamRef = useRef(null)
 
-  // Keep the URL in sync so any view is a shareable link.
   useEffect(() => {
     const p = new URLSearchParams()
     p.set('text', text)
@@ -46,24 +50,52 @@ export default function App() {
   const flash = useCallback((msg) => {
     setToast(msg)
     window.clearTimeout(flash._t)
-    flash._t = window.setTimeout(() => setToast(''), 2200)
+    flash._t = window.setTimeout(() => setToast(''), 2400)
   }, [])
+
+  const onPhrase = useCallback((i, n) => setSeq({ i, n }), [])
 
   const commit = useCallback((value) => {
     const v = (value ?? draft).trim()
     setText(v.length ? v : ' ')
   }, [draft])
 
-  const copyLink = useCallback(async () => {
+  const shareURL = useCallback(() => {
     const p = new URLSearchParams({ text, theme: String(themeIdx) })
-    const url = `${window.location.origin}${window.location.pathname}?${p.toString()}`
+    return `${window.location.origin}${window.location.pathname}?${p.toString()}`
+  }, [text, themeIdx])
+
+  const copyLink = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(shareURL())
       flash('Link copied — share it ✦')
     } catch {
-      flash(url)
+      flash(shareURL())
     }
-  }, [text, themeIdx, flash])
+  }, [shareURL, flash])
+
+  // Native share sheet on mobile (shares the rendered image + link when possible).
+  const shareNative = useCallback(async () => {
+    const url = shareURL()
+    const msg = `I made "${text}" out of stardust ✦`
+    try {
+      const gl = glRef.current
+      if (gl && navigator.canShare) {
+        const blob = await new Promise((res) => gl.domElement.toBlob(res, 'image/png'))
+        if (blob) {
+          const file = new File([blob], 'stardust.png', { type: 'image/png' })
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text: msg, url })
+            return
+          }
+        }
+      }
+      await navigator.share({ title: 'Stardust', text: msg, url })
+    } catch (e) {
+      if (e && e.name === 'AbortError') return
+      copyLink()
+    }
+  }, [shareURL, text, copyLink])
 
   const saveImage = useCallback(() => {
     const gl = glRef.current
@@ -105,27 +137,38 @@ export default function App() {
     }
   }, [micOn, flash])
 
-  // Record the reform animation to a WebM video.
+  // Record to MP4 (so clips play on iPhone / iMessage / Instagram), WebM fallback.
   const recordVideo = useCallback(() => {
     const gl = glRef.current
     if (!gl || recording) return
     const canvas = gl.domElement
-    if (!canvas.captureStream) { flash('Recording not supported here'); return }
+    if (!canvas.captureStream || !window.MediaRecorder) { flash('Recording not supported here'); return }
 
-    const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-    const mimeType = types.find((t) => window.MediaRecorder?.isTypeSupported(t))
+    const types = [
+      'video/mp4;codecs=avc1.42E01E',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ]
+    const mimeType = types.find((t) => window.MediaRecorder.isTypeSupported(t))
     if (!mimeType) { flash('Recording not supported here'); return }
+    const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm'
+
+    const phrases = parsePhrases(text)
+    const isSeq = phrases.length > 1
+    const durationMs = isSeq ? Math.min(phrases.length * HOLD_MS + 1600, 17000) : 4200
 
     const stream = canvas.captureStream(60)
     const chunks = []
     const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 12_000_000 })
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
     rec.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' })
+      const blob = new Blob(chunks, { type: mimeType.split(';')[0] })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `stardust-${text.replace(/[^a-z0-9]/gi, '_') || 'art'}.webm`
+      a.download = `stardust-${text.replace(/[^a-z0-9]/gi, '_') || 'art'}.${ext}`
       a.click()
       URL.revokeObjectURL(url)
       setRecording(false)
@@ -133,10 +176,11 @@ export default function App() {
     }
 
     setRecording(true)
-    flash('Recording the morph…')
-    setBurst((b) => b + 1) // explode, then let it reform on camera
+    flash(isSeq ? 'Recording the sequence…' : 'Recording the morph…')
+    setRestart((r) => r + 1)            // start the sequence from the first phrase
+    if (!isSeq) setBurst((b) => b + 1)  // explode + reform for single words
     rec.start()
-    window.setTimeout(() => rec.state !== 'inactive' && rec.stop(), 4200)
+    window.setTimeout(() => rec.state !== 'inactive' && rec.stop(), durationMs)
   }, [recording, text, flash])
 
   const theme = THEMES[themeIdx].colors
@@ -150,20 +194,35 @@ export default function App() {
         dpr={[1, 2]}
       >
         <color attach="background" args={['#02030a']} />
-        <Particles text={text} theme={theme} analyserRef={analyserRef} burst={burst} />
+        <Particles
+          text={text}
+          theme={theme}
+          analyserRef={analyserRef}
+          burst={burst}
+          restart={restart}
+          onPhrase={onPhrase}
+        />
       </Canvas>
 
       <div style={styles.brand}>✦ STARDUST</div>
       <div style={styles.hint}>move your cursor through the stars</div>
 
       <div style={styles.panel}>
+        {seq.n > 1 && (
+          <div style={styles.dots}>
+            {Array.from({ length: seq.n }).map((_, i) => (
+              <span key={i} style={{ ...styles.dot, opacity: i === seq.i ? 1 : 0.3 }} />
+            ))}
+          </div>
+        )}
+
         <div style={styles.inputRow}>
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && commit()}
-            placeholder="type anything…"
-            maxLength={24}
+            placeholder="type anything · or · a · message"
+            maxLength={80}
             spellCheck={false}
             autoFocus
             style={styles.input}
@@ -195,7 +254,9 @@ export default function App() {
           </div>
 
           <div style={styles.actions}>
-            <button style={styles.iconBtn} onClick={copyLink} title="Copy shareable link">link</button>
+            <button style={styles.iconBtn} onClick={canShareNative ? shareNative : copyLink} title="Share">
+              {canShareNative ? '↗ share' : 'link'}
+            </button>
             <button
               style={{ ...styles.iconBtn, ...(micOn ? styles.iconActive : null) }}
               onClick={toggleMic}
@@ -206,7 +267,7 @@ export default function App() {
               style={{ ...styles.iconBtn, ...(recording ? styles.recActive : null) }}
               onClick={recordVideo}
               disabled={recording}
-              title="Record the morph as video"
+              title="Record as video"
             >{recording ? '● rec' : 'video'}</button>
           </div>
         </div>
@@ -242,6 +303,8 @@ const styles = {
     display: 'flex', flexDirection: 'column', gap: 12,
     boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
   },
+  dots: { display: 'flex', gap: 7, justifyContent: 'center' },
+  dot: { width: 7, height: 7, borderRadius: '50%', background: '#fff', transition: 'opacity 0.3s ease' },
   inputRow: { display: 'flex', gap: 8 },
   input: {
     flex: 1, minWidth: 0, background: 'rgba(0,0,0,0.35)',

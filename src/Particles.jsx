@@ -1,13 +1,14 @@
-import React, { useMemo, useRef, useEffect } from 'react'
+import React, { useMemo, useRef, useEffect, useCallback } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { sampleText } from './sampleText.js'
+import { parsePhrases, HOLD_MS } from './phrases.js'
 
 const isMobile = typeof window !== 'undefined' &&
   (window.matchMedia('(max-width: 768px)').matches || /Mobi|Android/i.test(navigator.userAgent))
 const COUNT = isMobile ? 12000 : 26000
+const SPAN = isMobile ? 8.5 : 11
 
-// Soft round glow sprite so each particle reads as a little star, not a square.
 function makeSprite() {
   const s = 64
   const c = document.createElement('canvas')
@@ -25,7 +26,7 @@ function makeSprite() {
   return tex
 }
 
-export default function Particles({ text, theme, analyserRef, burst }) {
+export default function Particles({ text, theme, analyserRef, burst, restart, onPhrase }) {
   const pointsRef = useRef()
   const groupRef = useRef()
   const matRef = useRef()
@@ -34,21 +35,19 @@ export default function Particles({ text, theme, analyserRef, burst }) {
   const sprite = useMemo(() => makeSprite(), [])
   const baseSize = isMobile ? 0.1 : 0.085
 
-  // Persistent per-particle state.
   const state = useMemo(() => {
     const positions = new Float32Array(COUNT * 3)
     const targets = new Float32Array(COUNT * 3)
     const velocities = new Float32Array(COUNT * 3)
     const colors = new Float32Array(COUNT * 3)
     const seed = new Float32Array(COUNT)
-
     for (let i = 0; i < COUNT; i++) {
       const r = 9 + Math.random() * 9
-      const t = Math.random() * Math.PI * 2
-      const p = Math.acos(2 * Math.random() - 1)
-      positions[i * 3] = r * Math.sin(p) * Math.cos(t)
-      positions[i * 3 + 1] = r * Math.sin(p) * Math.sin(t)
-      positions[i * 3 + 2] = r * Math.cos(p)
+      const th = Math.random() * Math.PI * 2
+      const ph = Math.acos(2 * Math.random() - 1)
+      positions[i * 3] = r * Math.sin(ph) * Math.cos(th)
+      positions[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th)
+      positions[i * 3 + 2] = r * Math.cos(ph)
       seed[i] = Math.random()
     }
     return { positions, targets, velocities, colors, seed }
@@ -57,22 +56,60 @@ export default function Particles({ text, theme, analyserRef, burst }) {
   const pointer = useRef(new THREE.Vector3(999, 999, 0))
   const pointerActive = useRef(false)
   const audioLevel = useRef(0)
+  const themeRef = useRef(theme)
+  const cloudsRef = useRef([])
+  const phase = useRef({ i: 0, t: HOLD_MS / 1000 })
 
-  // Rebuild targets whenever the text changes.
-  useEffect(() => {
-    const cloud = sampleText(text, { worldWidth: isMobile ? 8.5 : 11, count: COUNT })
-    const { targets } = state
-    for (let i = 0; i < COUNT; i++) {
-      targets[i * 3] = cloud[i * 2]
-      targets[i * 3 + 1] = cloud[i * 2 + 1]
-      // shallow depth keeps the word crisp while still giving it volume
-      targets[i * 3 + 2] = (state.seed[i] - 0.5) * 0.7
-      state.velocities[i * 3] += (Math.random() - 0.5) * 0.5
-      state.velocities[i * 3 + 1] += (Math.random() - 0.5) * 0.5
+  // Write one phrase's point cloud into the targets + recolor for the theme.
+  const applyCloud = useCallback((i) => {
+    const cloud = cloudsRef.current[i]
+    if (!cloud) return
+    const { targets, colors, velocities, seed } = state
+    const a = new THREE.Color(themeRef.current[0])
+    const b = new THREE.Color(themeRef.current[1])
+    const tmp = new THREE.Color()
+    for (let n = 0; n < COUNT; n++) {
+      const tx = cloud[n * 2]
+      const ty = cloud[n * 2 + 1]
+      targets[n * 3] = tx
+      targets[n * 3 + 1] = ty
+      targets[n * 3 + 2] = (seed[n] - 0.5) * 0.7
+      velocities[n * 3] += (Math.random() - 0.5) * 0.6
+      velocities[n * 3 + 1] += (Math.random() - 0.5) * 0.6
+      const u = THREE.MathUtils.clamp(tx / SPAN + 0.5, 0, 1)
+      tmp.copy(a).lerp(b, u)
+      const spark = 0.75 + seed[n] * 0.6
+      colors[n * 3] = tmp.r * spark
+      colors[n * 3 + 1] = tmp.g * spark
+      colors[n * 3 + 2] = tmp.b * spark
     }
-  }, [text, state])
+    if (pointsRef.current) pointsRef.current.geometry.attributes.color.needsUpdate = true
+  }, [state])
 
-  // Explode outward on "burst" (used to capture the reform animation on video).
+  // Rebuild the sequence of clouds whenever the text changes.
+  useEffect(() => {
+    const phrases = parsePhrases(text)
+    cloudsRef.current = phrases.map((p) => sampleText(p, { worldWidth: SPAN, count: COUNT }))
+    phase.current = { i: 0, t: HOLD_MS / 1000 }
+    applyCloud(0)
+    onPhrase?.(0, phrases.length)
+  }, [text, applyCloud, onPhrase])
+
+  // Recolor in place when the theme changes.
+  useEffect(() => {
+    themeRef.current = theme
+    applyCloud(phase.current.i)
+  }, [theme, applyCloud])
+
+  // Restart the message sequence from the first phrase (used before recording).
+  useEffect(() => {
+    if (!restart) return
+    phase.current = { i: 0, t: HOLD_MS / 1000 }
+    applyCloud(0)
+    onPhrase?.(0, cloudsRef.current.length)
+  }, [restart, applyCloud, onPhrase])
+
+  // Explode outward on "burst" (used to capture the reform on video).
   useEffect(() => {
     if (!burst) return
     const { positions, velocities } = state
@@ -86,26 +123,6 @@ export default function Particles({ text, theme, analyserRef, burst }) {
       velocities[ix + 2] += (dz / len) * f
     }
   }, [burst, state])
-
-  // Recolor whenever theme changes.
-  useEffect(() => {
-    const { colors, targets, seed } = state
-    const a = new THREE.Color(theme[0])
-    const b = new THREE.Color(theme[1])
-    const tmp = new THREE.Color()
-    const span = isMobile ? 8.5 : 11
-    for (let i = 0; i < COUNT; i++) {
-      const t = THREE.MathUtils.clamp(targets[i * 3] / span + 0.5, 0, 1)
-      tmp.copy(a).lerp(b, t)
-      const spark = 0.75 + seed[i] * 0.6
-      colors[i * 3] = tmp.r * spark
-      colors[i * 3 + 1] = tmp.g * spark
-      colors[i * 3 + 2] = tmp.b * spark
-    }
-    if (pointsRef.current) {
-      pointsRef.current.geometry.attributes.color.needsUpdate = true
-    }
-  }, [theme, state, text])
 
   // Track the pointer and project onto the world plane.
   useEffect(() => {
@@ -147,26 +164,37 @@ export default function Particles({ text, theme, analyserRef, burst }) {
     const active = pointerActive.current
     const t = performance.now() * 0.001
 
-    // --- audio level (smoothed) ---
+    // advance the message sequence
+    if (cloudsRef.current.length > 1) {
+      phase.current.t -= dt
+      if (phase.current.t <= 0) {
+        phase.current.i = (phase.current.i + 1) % cloudsRef.current.length
+        phase.current.t = HOLD_MS / 1000
+        applyCloud(phase.current.i)
+        onPhrase?.(phase.current.i, cloudsRef.current.length)
+      }
+    }
+
+    // audio level (smoothed)
     const analyser = analyserRef && analyserRef.current
-    let target = 0
+    let lvlTarget = 0
     if (analyser) {
       if (!freqData.current || freqData.current.length !== analyser.frequencyBinCount) {
         freqData.current = new Uint8Array(analyser.frequencyBinCount)
       }
       analyser.getByteFrequencyData(freqData.current)
       let sum = 0
-      const n = Math.min(freqData.current.length, 48) // emphasize bass/mids
-      for (let k = 0; k < n; k++) sum += freqData.current[k]
-      target = Math.min(1, (sum / n / 255) * 1.8)
+      const nb = Math.min(freqData.current.length, 48)
+      for (let k = 0; k < nb; k++) sum += freqData.current[k]
+      lvlTarget = Math.min(1, (sum / nb / 255) * 1.8)
     }
-    audioLevel.current += (target - audioLevel.current) * 0.18
+    audioLevel.current += (lvlTarget - audioLevel.current) * 0.18
     const al = audioLevel.current
 
     const stiffness = 6.5
     const damping = Math.pow(0.0006, dt)
     const repelR2 = 2.4 * 2.4
-    const pulse = al * 3.2 // outward kick on the beat
+    const pulse = al * 3.2
 
     for (let i = 0; i < COUNT; i++) {
       const ix = i * 3
@@ -194,9 +222,8 @@ export default function Particles({ text, theme, analyserRef, burst }) {
       velocities[iy] += Math.cos(t * 0.6 + s * 40) * 0.006
       velocities[iz] += Math.sin(t * 0.5 + s * 50) * 0.006
 
-      // music push: drive each particle outward from its target on loud frames
       if (pulse > 0.01) {
-        velocities[ix] += (targets[ix] === 0 ? (s - 0.5) : targets[ix]) * pulse * dt * 0.6
+        velocities[ix] += targets[ix] * pulse * dt * 0.6
         velocities[iy] += targets[iy] * pulse * dt * 0.6
       }
 
@@ -210,18 +237,14 @@ export default function Particles({ text, theme, analyserRef, burst }) {
     }
 
     pointsRef.current.geometry.attributes.position.needsUpdate = true
-
-    if (matRef.current) {
-      matRef.current.size = baseSize * (1 + al * 1.6)
-    }
+    if (matRef.current) matRef.current.size = baseSize * (1 + al * 1.6)
 
     if (groupRef.current) {
       const tx = active ? pointer.current.y * 0.03 : 0
       const ty = active ? pointer.current.x * 0.03 : 0
       groupRef.current.rotation.x += (tx - groupRef.current.rotation.x) * 0.04
       groupRef.current.rotation.y += (ty - groupRef.current.rotation.y) * 0.04
-      const sc = 1 + al * 0.06
-      groupRef.current.scale.setScalar(sc)
+      groupRef.current.scale.setScalar(1 + al * 0.06)
     }
   })
 
